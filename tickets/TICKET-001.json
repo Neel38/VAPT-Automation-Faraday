@@ -1,0 +1,18 @@
+{
+  "ticket_id": "TICKET-001",
+  "vuln_name": "SMB Vulnerability (MS17-010 EternalBlue)",
+  "cve": "CVE-2017-0144",
+  "host": "192.168.1.105",
+  "port": "445",
+  "severity": "critical",
+  "cvss": 9.8,
+  "priority": "P0",
+  "status": "open",
+  "description": "The SMB server in Microsoft Windows 7 SP1, Windows Server 2008 R2 SP1, Windows Vista SP2, Windows XP SP3, Windows 8, Windows Server 2012, Windows 8.1, and Windows Server 2012 R2 allows remote attackers to execute arbitrary code via crafted packets, aka MS17-010.",
+  "created_at": "2025-02-18T10:35:51.234567",
+  "acknowledged_at": null,
+  "resolved_at": null,
+  "resolution_notes": null,
+  "assigned_to": null,
+  "faraday_finding_id": "finding_123456"
+}

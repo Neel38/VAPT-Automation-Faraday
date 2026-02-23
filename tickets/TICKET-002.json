@@ -1,0 +1,18 @@
+{
+  "ticket_id": "TICKET-002",
+  "vuln_name": "Apache Struts2 RCE Vulnerability",
+  "cve": "CVE-2017-5645",
+  "host": "192.168.1.110",
+  "port": "8080",
+  "severity": "critical",
+  "cvss": 9.6,
+  "priority": "P0",
+  "status": "acknowledged",
+  "description": "Apache Struts 2.3.5 through 2.3.31 and 2.5 before 2.5.10 allow remote attackers to execute arbitrary code via a crafted Content-Type, Content-Length, or other HTTP header, as demonstrated by a contentType header containing a Java expression language (EL) injection payload.",
+  "created_at": "2025-02-18T10:35:52.345678",
+  "acknowledged_at": "2025-02-18T11:00:00.000000",
+  "resolved_at": null,
+  "resolution_notes": null,
+  "assigned_to": "security-team",
+  "faraday_finding_id": "finding_123457"
+}

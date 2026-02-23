@@ -1,0 +1,18 @@
+{
+  "ticket_id": "TICKET-003",
+  "vuln_name": "Unencrypted Authentication Over Network",
+  "cve": null,
+  "host": "192.168.1.115",
+  "port": "21",
+  "severity": "high",
+  "cvss": 7.5,
+  "priority": "P1",
+  "status": "resolved",
+  "description": "FTP protocol transmits credentials in cleartext over the network, allowing attackers to intercept and capture login credentials.",
+  "created_at": "2025-02-17T15:20:10.456789",
+  "acknowledged_at": "2025-02-17T16:00:00.000000",
+  "resolved_at": "2025-02-18T09:30:00.000000",
+  "resolution_notes": "Disabled FTP service. Migrated users to SFTP on port 22.",
+  "assigned_to": "infrastructure-team",
+  "faraday_finding_id": "finding_123458"
+}

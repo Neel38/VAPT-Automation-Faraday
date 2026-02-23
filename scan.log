@@ -1,0 +1,21 @@
+[2025-02-18 10:30:15] - VAPT Scan Pipeline Started
+[2025-02-18 10:30:16] - Validating configuration: /config/settings.yaml
+[2025-02-18 10:30:17] - Loaded configuration successfully
+[2025-02-18 10:30:18] - Starting Nmap scan on target: 192.168.1.0/24 with profile: quick
+[2025-02-18 10:30:19] - Nmap command: nmap -T4 -F -oX reports/nmap/2025-02-18/scan_103015_quick_a1b2c3.xml 192.168.1.0/24
+[2025-02-18 10:35:42] - Nmap scan completed successfully
+[2025-02-18 10:35:43] - Parsed 14 findings from Nmap XML output
+[2025-02-18 10:35:44] - Loading existing findings from Faraday workspace: lab_scan
+[2025-02-18 10:35:45] - Loaded 3 previously imported findings
+[2025-02-18 10:35:46] - Checking for duplicates...
+[2025-02-18 10:35:47] - Found 11 new findings, 3 duplicate findings
+[2025-02-18 10:35:48] - Importing scan results to Faraday...
+[2025-02-18 10:35:50] - Successfully imported scan to Faraday workspace: lab_scan
+[2025-02-18 10:35:51] - ================================================
+[2025-02-18 10:35:51] - Scan completed: 2025-02-18 10:35
+[2025-02-18 10:35:51] - New findings imported: 11
+[2025-02-18 10:35:52] - Duplicate findings skipped: 3
+[2025-02-18 10:35:52] - Total findings: 14
+[2025-02-18 10:35:52] - Workspace: lab_scan
+[2025-02-18 10:35:52] - ================================================
+[2025-02-18 10:35:53] - Scan pipeline completed successfully
