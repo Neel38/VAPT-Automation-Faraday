@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-"""
-Master VAPT Pipeline Orchestrator
-Coordinates all components for automated vulnerability assessment and reporting.
-"""
 
 import argparse
 import logging
