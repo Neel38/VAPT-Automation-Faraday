@@ -1,20 +1,35 @@
+#!/usr/bin/env python3
+"""
+Severity-Based Alert Engine for VAPT Pipeline
+Monitors Faraday for new findings and sends formatted alerts.
+"""
+
+import argparse
+import json
+import logging
 import os
+import sys
+import time
 import requests
-from requests.auth import HTTPBasicAuth
+import smtplib
+from datetime import datetime
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from pathlib import Path
+from typing import Dict, List
+import yaml
 
-FARADAY_USERNAME = os.getenv('FARADAY_USERNAME')
-FARADAY_PASSWORD = os.getenv('FARADAY_PASSWORD')
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('alert_engine.log'),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger(__name__)
 
-# Sample request using the username and password for authentication
-url = 'http://your-faraday-instance/api/endpoint'
-response = requests.get(url, auth=HTTPBasicAuth(FARADAY_USERNAME, FARADAY_PASSWORD))
-
-<<<<<<< HEAD
-if response.status_code == 200:
-    print('Success:', response.json())
-else:
-    print('Failed with status code:', response.status_code)
-=======
 class AlertEngine:
     """Monitors Faraday findings and sends alerts based on severity."""
     
@@ -438,4 +453,3 @@ def main():
 
 if __name__ == '__main__':
     main()
->>>>>>> b961c69 (Update Faraday integration)

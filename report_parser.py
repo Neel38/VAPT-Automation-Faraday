@@ -8,11 +8,11 @@ password = os.getenv('FARADAY_PASSWORD')
 
 # Example function demonstrating HTTP Basic Authentication
 
-<<<<<<< HEAD
+
 def make_request(url):
     response = requests.get(url, auth=HTTPBasicAuth(username, password))
     return response
-=======
+
 class ReportParser:
     """Parses vulnerability scan reports from multiple tools."""
     
@@ -460,6 +460,6 @@ class ReportParser:
         except Exception as e:
             logger.error(f"Failed to export findings to JSON: {str(e)}")
             raise
->>>>>>> b961c69 (Update Faraday integration)
+
 
 # Use the make_request function within your application

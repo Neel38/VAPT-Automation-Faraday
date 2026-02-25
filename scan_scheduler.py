@@ -1,5 +1,3 @@
-<<<<<<< HEAD
-=======
 #!/usr/bin/env python3
 """
 Automated Scan Scheduler for VAPT Pipeline
@@ -9,28 +7,28 @@ Updated for Faraday Community Edition with HTTP Basic Authentication.
 
 import argparse
 import subprocess
->>>>>>> b961c69 (Update Faraday integration)
 import os
-import requests
-from requests.auth import HTTPBasicAuth
+import json
+import logging
+import sys
+from datetime import datetime
+from pathlib import Path
+import hashlib
+import yaml
+from typing import Dict, List, Tuple
 
-# Load credentials from environment variables or config file
-username = os.getenv('FARADAY_USER')
-password = os.getenv('FARADAY_PASS')
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('scan.log'),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger(__name__)
 
-if username is None or password is None:
-    raise EnvironmentError("Faraday credentials not set in environment variables.")
 
-<<<<<<< HEAD
-# Example of sending a request to Faraday
-url = 'http://faraday.example.com/api/'  # Replace with your Faraday API URL
-response = requests.get(url, auth=HTTPBasicAuth(username, password))
-
-if response.status_code == 200:
-    print('Success:', response.json())
-else:
-    print('Error:', response.status_code, response.text)
-=======
 class ScanScheduler:
     """Handles scheduling and execution of vulnerability scans."""
     
@@ -354,4 +352,4 @@ def main():
 
 if __name__ == '__main__':
     main()
->>>>>>> b961c69 (Update Faraday integration)
+
