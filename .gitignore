@@ -1,0 +1,22 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Virtualenvs
+.venv/
+venv/
+faraday-venv/
+
+# Runtime/log artifacts
+*.log
+processed_findings.json
+
+# Generated scan outputs / artifacts
+reports/**
+!reports/**/.gitkeep
+
+# Generated tickets (commit sample tickets explicitly if needed)
+tickets/*.json
+!tickets/.gitkeep

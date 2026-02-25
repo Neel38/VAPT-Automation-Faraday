@@ -200,11 +200,15 @@ class VAPTPipeline:
     def validate_environment(self) -> bool:
         """Validate that required tools and credentials are available."""
         logger.info("Validating environment...")
-        
-        # Check for Faraday API key
-        api_key = os.getenv('FARADAY_API_KEY')
-        if not api_key:
-            logger.error("FARADAY_API_KEY environment variable not set")
+
+        # Check for Faraday credentials (Community edition: username/password)
+        faraday_user = os.getenv('FARADAY_USERNAME')
+        faraday_pass = os.getenv('FARADAY_PASSWORD')
+        if not faraday_user or not faraday_pass:
+            logger.error(
+                "Faraday credentials not set. Please export FARADAY_USERNAME and "
+                "FARADAY_PASSWORD before running the pipeline."
+            )
             return False
         
         # Check for required Python packages

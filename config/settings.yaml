@@ -1,10 +1,11 @@
 # VAPT Pipeline Configuration
-# This file contains all configurable parameters for the pipeline
+# Updated for Faraday Community Edition with HTTP Basic Auth
 
-# Faraday Server Configuration
+# Faraday Server Configuration - UPDATED FOR BASIC AUTH
 faraday:
   url: "http://localhost:5985"
-  api_key: "${FARADAY_API_KEY}"  # Use environment variable
+  username: "${FARADAY_USERNAME}"
+  password: "${FARADAY_PASSWORD}"
   timeout: 30
   verify_ssl: false
 
@@ -26,7 +27,7 @@ scan_profiles:
 # Alert Configuration
 alerts:
   enabled: true
-  severity_threshold: "high"  # Trigger alerts for high and above
+  severity_threshold: "high"
   channels:
     slack:
       enabled: true
@@ -37,12 +38,12 @@ alerts:
       smtp_port: 587
       from_address: "${EMAIL_FROM}"
       to_address: "${EMAIL_TO}"
-  polling_interval: 60  # seconds
+  polling_interval: 60
 
 # Ticketing System Configuration
 tickets:
   enabled: true
-  severity_threshold: "high"  # Create tickets for high and above
+  severity_threshold: "high"
   priority_mapping:
     critical: "P0"
     high: "P1"
@@ -54,7 +55,7 @@ tickets:
 reporting:
   template_engine: "jinja2"
   output_format: "html"
-  compliance_framework: "owasp"  # owasp or cis
+  compliance_framework: "owasp"
   include_screenshots: false
   include_remediation: true
 
@@ -62,7 +63,7 @@ reporting:
 logging:
   level: "INFO"
   file: "pipeline.log"
-  max_file_size: 10485760  # 10MB
+  max_file_size: 10485760
   backup_count: 5
 
 # Report Directory Configuration
@@ -72,20 +73,20 @@ directories:
   templates: "./templates"
   logs: "./logs"
 
-# Scan Target Configuration (can be overridden via CLI)
+# Scan Target Configuration
 targets:
   default_workspace: "default_lab"
   default_profile: "quick"
   network_ranges:
-    - "192.168.1.0/24"
-    - "10.0.0.0/8"
+    - "172.17.0.2" #DVWA
+    - "10.0.2.15" #metasploitable2
 
-# DAST Configuration (for web scanning)
+# DAST Configuration
 dast:
   enabled: true
   tools:
     - "owasp-zap"
   zap:
-    url: "http://localhost:8080"
+    url: "http://localhost:9392"
     baseline_scan_timeout: 600
     report_format: "json"

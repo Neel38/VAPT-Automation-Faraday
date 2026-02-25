@@ -76,9 +76,25 @@ class ReportGenerator:
         """Initialize report generator."""
         self.config = self._load_config(config_path)
         self.faraday_url = self.config['faraday']['url']
-        self.faraday_api_key = os.getenv('FARADAY_API_KEY', self.config['faraday']['api_key'])
+        # Credentials for Faraday Community Edition (cookie-based auth)
+        self.username = os.getenv(
+            'FARADAY_USERNAME',
+            self.config['faraday'].get('username', 'admin'),
+        )
+        self.password = os.getenv(
+            'FARADAY_PASSWORD',
+            self.config['faraday'].get('password', ''),
+        )
+
+        if not self.username or not self.password:
+            logger.error(
+                "Faraday username/password not configured. "
+                "Set FARADAY_USERNAME and FARADAY_PASSWORD environment variables."
+            )
+            sys.exit(1)
+
         self.session = requests.Session()
-        self.session.headers.update({'Authorization': f'Bearer {self.faraday_api_key}'})
+        self._login()
         
         # Setup Jinja2 environment
         template_dir = self.config.get('directories', {}).get('templates', './templates')
@@ -97,21 +113,42 @@ class ReportGenerator:
         except FileNotFoundError:
             logger.error(f"Config file not found: {config_path}")
             sys.exit(1)
+
+    def _login(self) -> None:
+        """Authenticate to Faraday API using cookie-based session."""
+        login_url = f"{self.faraday_url}/_api/login"
+        try:
+            resp = self.session.post(
+                login_url,
+                json={"email": self.username, "password": self.password},
+                timeout=self.config['faraday']['timeout'],
+            )
+            resp.raise_for_status()
+            logger.info("Authenticated to Faraday API (session cookie established).")
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to authenticate to Faraday API: {e}")
+            sys.exit(1)
     
     def fetch_findings(self, workspace: str) -> List[Dict]:
         """Fetch all findings from Faraday workspace."""
         try:
-            endpoint = f"{self.faraday_url}/api/v3/workspaces/{workspace}/vulns"
-            
+            # Community edition uses /_api and workspace-scoped vulns endpoint
+            endpoint = f"{self.faraday_url}/_api/v3/ws/{workspace}/vulns/"
+
             response = self.session.get(
                 endpoint,
-                timeout=self.config['faraday']['timeout']
+                timeout=self.config['faraday']['timeout'],
             )
             response.raise_for_status()
-            
+
             data = response.json()
-            self.findings = data.get('data', [])
-            
+            if isinstance(data, dict) and 'data' in data:
+                self.findings = data.get('data', [])
+            elif isinstance(data, list):
+                self.findings = data
+            else:
+                self.findings = []
+
             logger.info(f"Fetched {len(self.findings)} findings from Faraday")
             return self.findings
             
