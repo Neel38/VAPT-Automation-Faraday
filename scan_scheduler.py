@@ -2,12 +2,18 @@ import os
 import requests
 from requests.auth import HTTPBasicAuth
 
-# Load credentials from environment variables
-username = os.getenv('FARADAY_USERNAME')
-password = os.getenv('FARADAY_PASSWORD')
+# Load credentials from environment variables or config file
+username = os.getenv('FARADAY_USER')
+password = os.getenv('FARADAY_PASS')
 
-# Example function that uses HTTP Basic Authentication
+if username is None or password is None:
+    raise EnvironmentError("Faraday credentials not set in environment variables.")
 
-def make_request(url):
-    response = requests.get(url, auth=HTTPBasicAuth(username, password))
-    return response.json()
+# Example of sending a request to Faraday
+url = 'http://faraday.example.com/api/'  # Replace with your Faraday API URL
+response = requests.get(url, auth=HTTPBasicAuth(username, password))
+
+if response.status_code == 200:
+    print('Success:', response.json())
+else:
+    print('Error:', response.status_code, response.text)
