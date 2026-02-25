@@ -59,7 +59,7 @@ class ReportParser:
         self.session = requests.Session()
         self._login()
     
-    def _load_config(self, config_path: str) -> Dict:
+    def _load_config(self, config_path: str) -> dict:
         """Load configuration from YAML file."""
         try:
             with open(config_path, 'r') as f:
@@ -83,7 +83,7 @@ class ReportParser:
             logger.error(f"Failed to authenticate to Faraday API: {e}")
             sys.exit(1)
     
-    def parse(self, file_path: str, tool_type: str = None) -> List[Dict]:
+    def parse(self, file_path: str, tool_type: str = None) -> list[dict]:
         """Parse report file based on tool type."""
         if not os.path.exists(file_path):
             logger.error(f"File not found: {file_path}")
@@ -138,7 +138,7 @@ class ReportParser:
         
         raise ValueError("Could not auto-detect tool type. Please specify with --type")
     
-    def _parse_nessus(self, file_path: str) -> List[Dict]:
+    def _parse_nessus(self, file_path: str) -> list[dict]:
         """Parse Nessus .nessus XML file."""
         findings = []
         try:
@@ -211,7 +211,7 @@ class ReportParser:
             logger.error(f"Failed to parse Nessus report: {str(e)}")
             raise
     
-    def _parse_openvas(self, file_path: str) -> List[Dict]:
+    def _parse_openvas(self, file_path: str) -> list[dict]:
         """Parse OpenVAS XML report."""
         findings = []
         try:
@@ -283,7 +283,7 @@ class ReportParser:
             logger.error(f"Failed to parse OpenVAS report: {str(e)}")
             raise
     
-    def _parse_burp(self, file_path: str) -> List[Dict]:
+    def _parse_burp(self, file_path: str) -> list[dict]:
         """Parse Burp Suite XML report."""
         findings = []
         try:
@@ -383,7 +383,7 @@ class ReportParser:
         else:
             return 'info'
     
-    def push_to_faraday(self, workspace: str) -> Dict:
+    def push_to_faraday(self, workspace: str) -> dict:
         """Push parsed findings to Faraday via REST API."""
         if not self.findings:
             logger.warning("No findings to push to Faraday")
@@ -391,7 +391,8 @@ class ReportParser:
         
         try:
             # Faraday Community edition uses the /_api prefix and workspace-scoped vulns endpoint
-            endpoint = f"{self.faraday_url}/_api/v3/ws/{workspace}/vulns/"
+            # NOTE: On this server the URL is defined without a trailing slash.
+            endpoint = f"{self.faraday_url}/_api/v3/ws/{workspace}/vulns"
 
             pushed_count = 0
             failed_count = 0

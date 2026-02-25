@@ -132,7 +132,8 @@ class AlertEngine:
         """Fetch new findings from Faraday."""
         try:
             # Community edition uses /_api and workspace-scoped vulns endpoint
-            endpoint = f"{self.faraday_url}/_api/v3/ws/{workspace}/vulns/"
+            # NOTE: On this server the URL is defined without a trailing slash.
+            endpoint = f"{self.faraday_url}/_api/v3/ws/{workspace}/vulns"
 
             response = self.session.get(
                 endpoint,
