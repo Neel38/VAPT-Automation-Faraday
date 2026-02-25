@@ -87,6 +87,6 @@ dast:
   tools:
     - "owasp-zap"
   zap:
-    url: "http://localhost:9392"
+    url: "http://localhost:8080"
     baseline_scan_timeout: 600
     report_format: "json"
