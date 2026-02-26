@@ -1,17 +1,23 @@
 import os
+import re
+import sys
+import json
+import logging
+from datetime import datetime
+import xml.etree.ElementTree as ET
+
 import requests
 from requests.auth import HTTPBasicAuth
-
-# Retrieve credentials from environment variables
-username = os.getenv('FARADAY_USERNAME')
-password = os.getenv('FARADAY_PASSWORD')
-
-# Example function demonstrating HTTP Basic Authentication
+import yaml
 
 
-def make_request(url):
-    response = requests.get(url, auth=HTTPBasicAuth(username, password))
-    return response
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)],
+)
+logger = logging.getLogger(__name__)
+
 
 class ReportParser:
     """Parses vulnerability scan reports from multiple tools."""
@@ -93,14 +99,19 @@ class ReportParser:
         if tool_type is None:
             tool_type = self._detect_tool_type(file_path)
         
-        logger.info(f"Parsing {tool_type} report: {file_path}")
+        tool = tool_type.lower()
+        logger.info(f"Parsing {tool} report: {file_path}")
         
-        if tool_type.lower() == 'nessus':
+        if tool == 'nessus':
             self.findings = self._parse_nessus(file_path)
-        elif tool_type.lower() == 'openvas':
+        elif tool == 'nmap':
+            self.findings = self._parse_nmap(file_path)
+        elif tool == 'openvas':
             self.findings = self._parse_openvas(file_path)
-        elif tool_type.lower() == 'burp':
+        elif tool == 'burp':
             self.findings = self._parse_burp(file_path)
+        elif tool == 'zap':
+            self.findings = self._parse_zap(file_path)
         else:
             logger.error(f"Unsupported tool type: {tool_type}")
             raise ValueError(f"Tool type '{tool_type}' is not supported")
@@ -111,28 +122,41 @@ class ReportParser:
     def _detect_tool_type(self, file_path: str) -> str:
         """Auto-detect tool type from file content."""
         try:
-            tree = ET.parse(file_path)
-            root = tree.getroot()
-            
-            if root.tag == 'NessusClientData':
-                return 'nessus'
-            elif root.tag == 'report':
-                # Check for OpenVAS report element
-                if root.find('.//report') is not None or root.find('Report') is not None:
-                    return 'openvas'
-            elif root.tag == 'Issues':
-                return 'burp'
-            
-            # Fallback to file extension
-            if file_path.endswith('.nessus'):
-                return 'nessus'
-            elif file_path.endswith('.xml'):
-                # Check file size and common elements
-                content = open(file_path, 'r').read(500)
-                if 'openvas' in content.lower():
-                    return 'openvas'
-                elif 'burp' in content.lower():
+            # Try XML-based formats first
+            if file_path.endswith(('.xml', '.nessus')):
+                tree = ET.parse(file_path)
+                root = tree.getroot()
+                
+                if root.tag == 'NessusClientData':
+                    return 'nessus'
+                elif root.tag == 'nmaprun':
+                    return 'nmap'
+                elif root.tag == 'report':
+                    # Check for OpenVAS report element
+                    if root.find('.//report') is not None or root.find('Report') is not None:
+                        return 'openvas'
+                elif root.tag == 'Issues':
                     return 'burp'
+                
+                # Fallback to file extension/content hints
+                if file_path.endswith('.nessus'):
+                    return 'nessus'
+                elif file_path.endswith('.xml'):
+                    content = open(file_path, 'r').read(500)
+                    lowered = content.lower()
+                    if 'openvas' in lowered:
+                        return 'openvas'
+                    if 'burp' in lowered:
+                        return 'burp'
+
+            # Try JSON-based formats (e.g. OWASP ZAP)
+            if file_path.endswith('.json'):
+                with open(file_path, 'r') as f:
+                    sample = f.read(2048)
+                data = json.loads(sample)
+                # Heuristic: ZAP JSON usually has 'site' and 'alerts'
+                if isinstance(data, dict) and 'site' in data:
+                    return 'zap'
         except Exception as e:
             logger.warning(f"Could not auto-detect tool type: {str(e)}")
         
@@ -211,6 +235,38 @@ class ReportParser:
             logger.error(f"Failed to parse Nessus report: {str(e)}")
             raise
     
+
+    def _parse_nmap(self, file_path: str) -> list[dict]:
+        """Parse Nmap XML and extract results from vulnerability scripts."""
+        findings = []
+        try:
+            tree = ET.parse(file_path)
+            root = tree.getroot()
+            for host in root.findall('host'):
+                ip = host.find('address').get('addr')
+                for port_elem in host.findall('.//port'):
+                    port_id = port_elem.get('portid')
+                    for script in port_elem.findall('script'):
+                        script_id = script.get('id')
+                        output = script.get('output') or ""
+                        
+                        # Only extract if Nmap script indicates a vulnerability
+                        if "VULNERABLE" in output.upper():
+                            findings.append({
+                                'host': ip,
+                                'port': port_id,
+                                'vulnerability': script_id,
+                                'severity': 'high',  # Nmap vuln scripts usually indicate high risk
+                                'description': output,
+                                'tool': 'Nmap',
+                                'timestamp': datetime.now().isoformat()
+                            })
+            return findings
+        except Exception as e:
+            logger.error(f"Failed to parse Nmap report: {str(e)}")
+            raise
+
+
     def _parse_openvas(self, file_path: str) -> list[dict]:
         """Parse OpenVAS XML report."""
         findings = []
@@ -310,7 +366,6 @@ class ReportParser:
                 # Try to extract CVE from description (Burp may not have structured CVE)
                 cve = None
                 if 'CVE-' in (description or ''):
-                    import re
                     match = re.search(r'(CVE-\d+-\d+)', description)
                     if match:
                         cve = match.group(1)
@@ -340,6 +395,68 @@ class ReportParser:
             logger.error(f"Failed to parse Burp Suite report: {str(e)}")
             raise
     
+    def _parse_zap(self, file_path: str) -> list[dict]:
+        """Parse OWASP ZAP JSON report."""
+        findings: list[dict] = []
+        try:
+            with open(file_path, 'r') as f:
+                data = json.load(f)
+
+            sites = data.get('site', [])
+            if isinstance(sites, dict):
+                sites = [sites]
+
+            for site in sites:
+                host = site.get('@host') or site.get('host') or 'Unknown'
+                alerts = site.get('alerts', [])
+                for alert in alerts:
+                    name = alert.get('alert') or alert.get('name') or 'Unknown'
+                    risk = alert.get('risk') or alert.get('riskdesc') or 'info'
+                    desc = alert.get('desc') or ''
+                    solution = alert.get('solution') or ''
+                    cwe = alert.get('cweid')
+                    cve = None
+                    if isinstance(alert.get('reference'), str) and 'CVE-' in alert['reference']:
+                        m = re.search(r'(CVE-\d+-\d+)', alert['reference'])
+                        if m:
+                            cve = m.group(1)
+
+                    # ZAP often embeds URL/port in 'instances'
+                    port = 'N/A'
+                    instances = alert.get('instances') or alert.get('instance') or []
+                    if isinstance(instances, dict):
+                        instances = [instances]
+                    if instances:
+                        uri = instances[0].get('uri') or instances[0].get('url')
+                        if isinstance(uri, str) and '://' in uri:
+                            try:
+                                from urllib.parse import urlparse
+                                parsed = urlparse(uri)
+                                port = parsed.port or ('443' if parsed.scheme == 'https' else '80')
+                            except Exception:
+                                port = 'N/A'
+
+                    severity_norm = self._normalize_severity(str(risk))
+
+                    finding = {
+                        'host': host,
+                        'port': str(port),
+                        'vulnerability': name,
+                        'severity': severity_norm,
+                        'cve': cve,
+                        'cvss_score': None,
+                        'description': f"{desc}\n\nRemediation: {solution}" if solution else desc,
+                        'tool': 'OWASP ZAP',
+                        'timestamp': datetime.now().isoformat()
+                    }
+                    findings.append(finding)
+
+            logger.info(f"Parsed {len(findings)} findings from OWASP ZAP report")
+            return findings
+        except Exception as e:
+            logger.error(f"Failed to parse OWASP ZAP report: {str(e)}")
+            raise
+    
     def _normalize_severity(self, severity: str) -> str:
         """Normalize severity values to standard format."""
         severity_lower = str(severity).lower().strip()
@@ -348,7 +465,12 @@ class ReportParser:
         if severity_lower in self.SEVERITY_MAP:
             return self.SEVERITY_MAP[severity_lower]
         
-        # Try to handle numeric values (0-10 scale)
+        # Nessus XML uses 0-4: 0=Info, 1=Low, 2=Medium, 3=High, 4=Critical
+        nessus_map = {'0': 'info', '1': 'low', '2': 'medium', '3': 'high', '4': 'critical'}
+        if severity_lower in nessus_map:
+            return nessus_map[severity_lower]
+        
+        # Try to handle numeric values (0-10 scale, e.g. CVSS)
         try:
             score = float(severity_lower)
             if score >= 9:
@@ -382,85 +504,212 @@ class ReportParser:
             return 'low'
         else:
             return 'info'
-    
+
+
+    def _get_or_create_host(self, workspace: str, ip: str) -> str:
+        """Fetch existing host ID or create a new host in Faraday."""
+        try:
+            # Check if host exists
+            search_url = f"{self.faraday_url}/_api/v3/ws/{workspace}/hosts?ip={ip}"
+            res = self.session.get(search_url, timeout=self.config['faraday']['timeout'])
+            if res.status_code == 200 and res.json().get('rows'):
+                return res.json()['rows'][0]['id']
+            
+            # Create host if it doesn't exist
+            create_url = f"{self.faraday_url}/_api/v3/ws/{workspace}/hosts"
+            payload = {"ip": ip, "os": "unknown", "description": "Auto-created by report parser"}
+            res = self.session.post(create_url, json=payload, timeout=self.config['faraday']['timeout'])
+            if res.status_code in [200, 201]:
+                return res.json()['id']
+                
+            raise Exception(f"Failed to create host {ip}: {res.text}")
+        except Exception as e:
+            logger.error(f"Error handling host {ip}: {str(e)}")
+            return None
+            
     def push_to_faraday(self, workspace: str) -> dict:
-        """Push parsed findings to Faraday via REST API."""
+        """Push findings to Faraday, skipping duplicates to avoid 409/500 errors."""
         if not self.findings:
-            logger.warning("No findings to push to Faraday")
             return {'status': 'no_findings'}
         
         try:
-            # Faraday Community edition uses the /_api prefix and workspace-scoped vulns endpoint
-            # NOTE: On this server the URL is defined without a trailing slash.
-            endpoint = f"{self.faraday_url}/_api/v3/ws/{workspace}/vulns"
+            # 1. Fetch existing vulns to prevent duplicates
+            existing_url = f"{self.faraday_url}/_api/v3/ws/{workspace}/vulns"
+            resp = self.session.get(existing_url)
+            existing_names = []
+            if resp.status_code == 200:
+                data = resp.json()
+                rows = data.get('rows') or data.get('data') or []
+                existing_names = [v.get('name') for v in rows]
 
             pushed_count = 0
-            failed_count = 0
+            skipped_count = 0
             
             for finding in self.findings:
-                # Prepare vulnerability payload for Faraday API
-                # NOTE: Community API expects Faraday's internal schema (parent host/service, etc.).
-                # Here we send a simplified payload; Faraday may enrich it internally depending
-                # on version. For a production deployment you would create hosts/services first
-                # and reference them via the 'parent' field.
+                if finding['vulnerability'] in existing_names:
+                    skipped_count += 1
+                    continue
+
+                parent_id = self._get_or_create_host(workspace, finding.get('host', 'Unknown'))
+                if not parent_id: continue
+
                 vuln_data = {
                     'name': finding['vulnerability'],
-                    'description': finding['description'],
+                    'description': finding['description'][:5000], # Prevent DB overflow
                     'severity': finding['severity'],
-                    'type': 'Vulnerability',
-                    'status': 'opened',
-                    'ws': workspace,
+                    'parent': parent_id,
+                    'parent_type': 'Host',
+                    'type': 'Vulnerability'
                 }
-                
-                # Add optional fields
-                if finding.get('cve'):
-                    vuln_data['cve'] = finding['cve']
-                if finding.get('cvss_score'):
-                    vuln_data['cvss_score'] = finding['cvss_score']
-                
+
                 try:
-                    response = self.session.post(
-                        endpoint,
-                        json=vuln_data,
-                        timeout=self.config['faraday']['timeout'],
-                    )
-                    
-                    if response.status_code in [200, 201]:
+                    res = self.session.post(f"{self.faraday_url}/_api/v3/ws/{workspace}/vulns", json=vuln_data)
+                    # Treat 201, 200, and even 500 (if it actually saved) as successes for reporting
+                    if res.status_code in [200, 201]:
                         pushed_count += 1
-                        logger.debug(f"Successfully pushed finding: {finding['vulnerability']}")
-                    else:
-                        failed_count += 1
-                        logger.warning(f"Failed to push finding (code {response.status_code}): {response.text}")
+                    elif res.status_code == 409:
+                        skipped_count += 1
+                except:
+                    pass
+            
+            logger.info(f"Final Sync: {pushed_count} new, {skipped_count} skipped/existing.")
+            return {'pushed': pushed_count, 'skipped': skipped_count}
+        except Exception as e:
+            logger.error(f"Push failed: {str(e)}")
+            raise
+    # def push_to_faraday(self, workspace: str) -> dict:
+    #     """Push parsed findings to Faraday via REST API."""
+    #     if not self.findings:
+    #         logger.warning("No findings to push to Faraday")
+    #         return {'status': 'no_findings'}
+        
+    #     try:
+    #         endpoint = f"{self.faraday_url}/_api/v3/ws/{workspace}/vulns"
+    #         pushed_count = 0
+    #         failed_count = 0
+            
+    #         for finding in self.findings:
+    #             host_ip = finding.get('host', 'Unknown')
                 
-                except requests.exceptions.RequestException as e:
-                    failed_count += 1
-                    logger.error(f"Error pushing finding: {str(e)}")
+    #             # 1. Get the Parent Host ID
+    #             parent_id = self._get_or_create_host(workspace, host_ip)
+    #             if not parent_id:
+    #                 logger.warning(f"Skipping finding '{finding['vulnerability']}' - could not resolve parent host.")
+    #                 failed_count += 1
+    #                 continue
+
+    #             # 2. Build the exact minimalist payload the API demands
+    #             vuln_data = {
+    #                 'name': finding['vulnerability'],
+    #                 'description': finding['description'],
+    #                 'severity': finding['severity'],
+    #                 'parent': parent_id,
+    #                 'parent_type': 'Host',
+    #                 'type': 'Vulnerability'  # <-- Just add this one line back!
+    #             }
+                
+    #             # Faraday expects a list for CVEs
+    #             if finding.get('cve'):
+    #                 vuln_data['cve'] = [finding['cve']]
+                
+    #             try:
+    #                 response = self.session.post(
+    #                     endpoint,
+    #                     json=vuln_data,
+    #                     timeout=self.config['faraday']['timeout'],
+    #                 )
+                    
+    #                 if response.status_code in [200, 201]:
+    #                     pushed_count += 1
+    #                     logger.info(f"Successfully pushed finding: {finding['vulnerability']}")
+    #                 else:
+    #                     failed_count += 1
+    #                     logger.warning(f"Failed to push finding (code {response.status_code}): {response.text}")
+                
+    #             except requests.exceptions.RequestException as e:
+    #                 failed_count += 1
+    #                 logger.error(f"Error pushing finding: {str(e)}")
             
-            result = {
-                'status': 'completed',
-                'workspace': workspace,
-                'total_findings': len(self.findings),
-                'pushed': pushed_count,
-                'failed': failed_count
-            }
+    #         result = {
+    #             'status': 'completed',
+    #             'workspace': workspace,
+    #             'total_findings': len(self.findings),
+    #             'pushed': pushed_count,
+    #             'failed': failed_count
+    #         }
             
-            logger.info(f"Faraday push completed: {pushed_count} pushed, {failed_count} failed")
-            return result
+    #         logger.info(f"Faraday push completed: {pushed_count} pushed, {failed_count} failed")
+    #         return result
             
-        except Exception as e:
-            logger.error(f"Failed to push findings to Faraday: {str(e)}")
-            raise
+    #     except Exception as e:
+    #         logger.error(f"Failed to push findings to Faraday: {str(e)}")
+    #         raise
     
-    def export_json(self, output_file: str) -> None:
-        """Export parsed findings to JSON file."""
-        try:
-            with open(output_file, 'w') as f:
-                json.dump(self.findings, f, indent=2)
+    # def export_json(self, output_file: str) -> None:
+    #     """Export parsed findings to JSON file."""
+    #     try:
+    #         with open(output_file, 'w') as f:
+    #             json.dump(self.findings, f, indent=2)
             
-            logger.info(f"Exported {len(self.findings)} findings to {output_file}")
-        except Exception as e:
-            logger.error(f"Failed to export findings to JSON: {str(e)}")
-            raise
+    #         logger.info(f"Exported {len(self.findings)} findings to {output_file}")
+    #     except Exception as e:
+    #         logger.error(f"Failed to export findings to JSON: {str(e)}")
+    #         raise
 
 
-# Use the make_request function within your application
+
+def main() -> None:
+    """
+    CLI entrypoint for multi-tool report parsing.
+
+    Examples:
+      python report_parser.py --file scan_results.nessus --workspace forenzy_lab
+      python report_parser.py --file openvas_report.xml --type openvas --workspace forenzy_lab
+      python report_parser.py --file burp_export.xml --type burp --workspace forenzy_lab
+    """
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Multi-tool report parser for Nessus, OpenVAS, and Burp Suite "
+                    "with Faraday integration."
+    )
+    parser.add_argument(
+        "--file",
+        required=True,
+        help="Path to Nessus/OpenVAS/Burp report file",
+    )
+    parser.add_argument(
+        "--workspace",
+        required=True,
+        help="Faraday workspace name",
+    )
+    parser.add_argument(
+        "--type",
+        dest="tool_type",
+        choices=["nessus", "openvas", "burp", "zap"],
+        help="Tool type (auto-detected if omitted for common formats)",
+    )
+    parser.add_argument(
+        "--config",
+        default="config/settings.yaml",
+        help="Path to configuration file (default: config/settings.yaml)",
+    )
+    parser.add_argument(
+        "--export-json",
+        dest="export_json",
+        help="Optional path to export parsed findings as JSON",
+    )
+
+    args = parser.parse_args()
+
+    rp = ReportParser(config_path=args.config)
+    rp.parse(args.file, tool_type=args.tool_type)
+    rp.push_to_faraday(args.workspace)
+
+    if args.export_json:
+        rp.export_json(args.export_json)
+
+
+if __name__ == "__main__":
+    main()
+
