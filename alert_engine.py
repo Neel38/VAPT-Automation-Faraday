@@ -128,64 +128,58 @@ class AlertEngine:
         finding_priority = self.SEVERITY_PRIORITY.get(severity, 4)
         return finding_priority <= threshold_priority
     
-    def fetch_new_findings(self, workspace: str) -> List[Dict]:
-        """Fetch new findings from Faraday."""
+    def fetch_new_findings(self, workspace: str) -> list[dict]:
+        """Fetch findings and extract the nested 'value' dictionary."""
         try:
-            # Community edition uses /_api and workspace-scoped vulns endpoint
-            # NOTE: On this server the URL is defined without a trailing slash.
-            endpoint = f"{self.faraday_url}/_api/v3/ws/{workspace}/vulns"
-
-            response = self.session.get(
-                endpoint,
-                timeout=self.config['faraday']['timeout'],
-            )
+            url = f"{self.faraday_url}/_api/v3/ws/{workspace}/vulns"
+            response = self.session.get(url, timeout=self.config['faraday']['timeout'])
             response.raise_for_status()
-
-            data = response.json()
-            if isinstance(data, dict) and 'data' in data:
-                findings = data.get('data', [])
-            elif isinstance(data, list):
-                findings = data
-            else:
-                findings = []
             
+            data = response.json()
+            raw_findings = data.get('vulnerabilities') or []
+
             new_findings = []
-            for finding in findings:
-                finding_id = finding.get('id')
-                if finding_id not in self.processed_findings:
-                    # Only alert on findings that meet severity threshold
-                    severity = finding.get('severity', 'info').lower()
-                    if self._meets_severity_threshold(severity):
-                        new_findings.append(finding)
-                        self.processed_findings.add(finding_id)
+            for item in raw_findings:
+                # The actual data is inside the 'value' key
+                finding_data = item.get('value', {})
+                severity = str(finding_data.get('severity', '')).lower()
+                
+                if severity in self.severity_threshold:
+                    vuln_id = str(finding_data.get('id'))
+                    if vuln_id not in self.processed_findings:
+                        # Store the inner 'value' dict for easier processing
+                        new_findings.append(finding_data)
             
             logger.info(f"Found {len(new_findings)} new findings meeting severity threshold")
             return new_findings
-            
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Failed to fetch findings from Faraday: {str(e)}")
+        except Exception as e:
+            logger.error(f"Failed to fetch findings: {str(e)}")
             return []
-    
-    def format_alert_message(self, finding: Dict) -> str:
-        """Format finding into a readable alert message."""
-        severity = finding.get('severity', 'unknown').upper()
-        icon = self.SEVERITY_ICONS.get(severity.lower(), '❓')
+
+    def format_alert_message(self, finding: Dict, workspace: str) -> str:
+        """Format finding into a readable alert message using 'target' and 'name'."""
+        severity_raw = finding.get('severity', 'unknown')
+        severity = str(severity_raw).upper()
+        icon = self.SEVERITY_ICONS.get(severity_raw.lower(), '❓')
         
-        host = finding.get('target_distribution', {}).get('host', 'Unknown')
-        port = finding.get('target_distribution', {}).get('port', 'N/A')
-        cve = finding.get('cve', 'N/A')
-        cvss_score = finding.get('cvss_score', 'N/A')
-        description = finding.get('description', 'No description available')
+        # verified keys from your JSON
+        host = finding.get('target', 'Unknown') 
+        vuln_name = finding.get('name', 'Unknown')
+        
+        cve_list = finding.get('cve', [])
+        cve = cve_list[0] if isinstance(cve_list, list) and cve_list else 'N/A'
+        
+        cvss_score = finding.get('cvss3', {}).get('base_score') or \
+                     finding.get('cvss2', {}).get('base_score') or 'N/A'
         
         message = f"""{icon} {severity} Finding Detected
 ─────────────────────────────
 Host:          {host}
-Port:          {port}
-Vulnerability: {finding.get('name', 'Unknown')}
+Vulnerability: {vuln_name}
 CVE:           {cve}
 Severity:      {severity}
 CVSS Score:    {cvss_score}
-Description:   {description[:200]}...
+Workspace:     {workspace}
 Detected at:   {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"""
         
         return message
@@ -370,8 +364,12 @@ VAPT Pipeline - Automated Vulnerability Alerting
             
             # Process each finding
             for finding in findings:
+                # Add the ID to the processed set IMMEDIATELY so it's tracked
+                vuln_id = str(finding.get('id'))
+                self.processed_findings.add(vuln_id)
+
                 if dry_run:
-                    message = self.format_alert_message(finding)
+                    message = self.format_alert_message(finding, workspace)
                     print(message)
                     print("\n" + "="*50 + "\n")
                     continue
