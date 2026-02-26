@@ -275,15 +275,13 @@ class ScanScheduler:
             'status': 'completed'
         }
         
-        print("\n" + "="*50)
-        print("[+] Scan Summary")
-        print("="*50)
-        print(f"[+] Scan completed: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+        ts = datetime.now().strftime('%Y-%m-%d %H:%M')
+        print()
+        print(f"[+] Scan complete: {ts}")
         print(f"[+] New findings imported: {new_count}")
         print(f"[~] Duplicate findings skipped: {duplicate_count}")
-        print(f"[+] Total findings: {summary['total_findings']}")
         print(f"[+] Workspace: {workspace}")
-        print("="*50 + "\n")
+        print()
         
         logger.info(f"Scan summary: {json.dumps(summary)}")
     
