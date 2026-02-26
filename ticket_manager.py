@@ -107,61 +107,47 @@ class TicketManager:
         return max(numbers) + 1 if numbers else 1
     
     def create_ticket_from_finding(self, finding: Dict) -> str:
-        """Create a ticket from a vulnerability finding."""
-        severity = finding.get('severity', 'low').lower()
+        """Create a ticket from a vulnerability finding using Faraday API keys."""
+        severity = str(finding.get('severity', 'low')).lower()
         
-        # Check if ticket should be created (High and Critical only)
+        # Check threshold
         severity_threshold = self.config.get('tickets', {}).get('severity_threshold', 'high')
         if self._is_severity_below_threshold(severity, severity_threshold):
-            logger.debug(f"Skipping ticket creation for {severity} finding")
             return None
         
         ticket_id = f"TICKET-{self.ticket_counter:03d}"
         self.ticket_counter += 1
         
-        # Calculate CVSS-based priority (if CVSS present)
-        cvss_score = finding.get('cvss_score')
+        # Extract CVSS safely from Faraday structure
+        cvss_score = finding.get('cvss3', {}).get('base_score') or \
+                     finding.get('cvss2', {}).get('base_score')
         
-        if cvss_score:
-            try:
-                cvss_score = float(cvss_score)
-                if cvss_score >= 9.0:
-                    priority = 'P0'
-                elif cvss_score >= 7.0:
-                    priority = 'P1'
-                else:
-                    priority = self.PRIORITY_MAP.get(severity, 'P3')
-            except (ValueError, TypeError):
-                priority = self.PRIORITY_MAP.get(severity, 'P3')
-        else:
-            priority = self.PRIORITY_MAP.get(severity, 'P3')
-        
-        # Create ticket object
+        priority = self.PRIORITY_MAP.get(severity, 'P3')
+        if cvss_score and float(cvss_score) >= 9.0:
+            priority = 'P0'
+
+        # Create ticket object with verified keys from the Faraday API
         ticket = {
             'ticket_id': ticket_id,
-            'vuln_name': finding.get('name', 'Unknown'),
-            'cve': finding.get('cve'),
-            'host': finding.get('target_distribution', {}).get('host', 'Unknown'),
-            'port': finding.get('target_distribution', {}).get('port', 'N/A'),
+            'vuln_name': finding.get('name', 'Unknown'), # Verified key: 'name'
+            'cve': finding.get('cve', []),
+            'host': finding.get('target', 'Unknown'),    # Verified key: 'target'
+            'port': finding.get('port', 'N/A'),
             'severity': severity,
             'cvss': cvss_score,
             'priority': priority,
             'status': 'open',
             'description': finding.get('description', ''),
             'created_at': datetime.now().isoformat(),
-            'acknowledged_at': None,
-            'resolved_at': None,
-            'resolution_notes': None,
-            'assigned_to': None,
             'faraday_finding_id': finding.get('id')
         }
         
-        # Save ticket to file
+        # Save to file
         ticket_file = self.tickets_dir / f"{ticket_id}.json"
         with open(ticket_file, 'w') as f:
             json.dump(ticket, f, indent=2)
         
-        logger.info(f"Created ticket {ticket_id} for finding: {finding.get('name')}")
+        logger.info(f"Created ticket {ticket_id} for: {ticket['vuln_name']}")
         return ticket_id
     
     def _is_severity_below_threshold(self, severity: str, threshold: str) -> bool:
@@ -252,10 +238,15 @@ class TicketManager:
         
         # Sort by priority (P0 first) then by creation date (newest first)
         priority_order = ['P0', 'P1', 'P2', 'P3', 'P4']
-        tickets.sort(key=lambda x: (
-            priority_order.index(x.get('priority', 'P4')),
-            datetime.fromisoformat(x.get('created_at', datetime.now().isoformat()))
-        ), reverse=True)
+        priority_rank = {p: i for i, p in enumerate(priority_order)}
+        tickets.sort(
+            key=lambda x: (
+                priority_rank.get(x.get('priority', 'P4'), len(priority_order)),
+                -datetime.fromisoformat(
+                    x.get('created_at', datetime.now().isoformat())
+                ).timestamp(),
+            )
+        )
         
         return tickets
     
@@ -282,37 +273,35 @@ class TicketManager:
         return stats
     
     def sync_with_faraday(self, workspace: str) -> None:
-        """Create tickets for new High/Critical findings from Faraday."""
+        """Create tickets by extracting data from the nested 'value' key."""
         try:
-            # Community edition uses /_api and workspace-scoped vulns endpoint
-            # NOTE: On this server the URL is defined without a trailing slash.
             endpoint = f"{self.faraday_url}/_api/v3/ws/{workspace}/vulns"
-
-            response = self.session.get(
-                endpoint,
-                timeout=self.config['faraday']['timeout'],
-            )
+            response = self.session.get(endpoint, timeout=self.config['faraday']['timeout'])
             response.raise_for_status()
 
             data = response.json()
-            if isinstance(data, dict) and 'data' in data:
-                findings = data.get('data', [])
-            elif isinstance(data, list):
-                findings = data
-            else:
-                findings = []
+            raw_findings = data.get('vulnerabilities') or []
             
             created_count = 0
-            for finding in findings:
-                # Check if ticket already exists for this finding
-                faraday_id = finding.get('id')
-                existing = False
+            for item in raw_findings:
+                # Dive into the 'value' dictionary where the real data lives
+                finding = item.get('value', {})
+                severity = str(finding.get('severity', '')).lower()
                 
+                if severity not in ['high', 'critical']:
+                    continue
+
+                faraday_id = finding.get('id')
+                if faraday_id is None:
+                    continue
+
+                # Deduplication logic remains the same
+                existing = False
                 for ticket_file in self.tickets_dir.glob('TICKET-*.json'):
                     try:
                         with open(ticket_file, 'r') as f:
                             ticket = json.load(f)
-                            if ticket.get('faraday_finding_id') == faraday_id:
+                            if str(ticket.get('faraday_finding_id')) == str(faraday_id):
                                 existing = True
                                 break
                     except:
@@ -324,9 +313,8 @@ class TicketManager:
                         created_count += 1
             
             logger.info(f"Synced with Faraday: created {created_count} new tickets")
-            
         except Exception as e:
-            logger.error(f"Failed to sync with Faraday: {str(e)}")
+            logger.error(f"Failed to sync: {str(e)}")
     
     def print_ticket(self, ticket: Dict) -> None:
         """Pretty print a ticket."""
