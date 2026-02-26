@@ -526,7 +526,7 @@ class ReportParser:
         except Exception as e:
             logger.error(f"Error handling host {ip}: {str(e)}")
             return None
-            
+
     def push_to_faraday(self, workspace: str) -> dict:
         """Push findings to Faraday, skipping duplicates to avoid 409/500 errors."""
         if not self.findings:
@@ -577,86 +577,7 @@ class ReportParser:
         except Exception as e:
             logger.error(f"Push failed: {str(e)}")
             raise
-    # def push_to_faraday(self, workspace: str) -> dict:
-    #     """Push parsed findings to Faraday via REST API."""
-    #     if not self.findings:
-    #         logger.warning("No findings to push to Faraday")
-    #         return {'status': 'no_findings'}
-        
-    #     try:
-    #         endpoint = f"{self.faraday_url}/_api/v3/ws/{workspace}/vulns"
-    #         pushed_count = 0
-    #         failed_count = 0
-            
-    #         for finding in self.findings:
-    #             host_ip = finding.get('host', 'Unknown')
-                
-    #             # 1. Get the Parent Host ID
-    #             parent_id = self._get_or_create_host(workspace, host_ip)
-    #             if not parent_id:
-    #                 logger.warning(f"Skipping finding '{finding['vulnerability']}' - could not resolve parent host.")
-    #                 failed_count += 1
-    #                 continue
-
-    #             # 2. Build the exact minimalist payload the API demands
-    #             vuln_data = {
-    #                 'name': finding['vulnerability'],
-    #                 'description': finding['description'],
-    #                 'severity': finding['severity'],
-    #                 'parent': parent_id,
-    #                 'parent_type': 'Host',
-    #                 'type': 'Vulnerability'  # <-- Just add this one line back!
-    #             }
-                
-    #             # Faraday expects a list for CVEs
-    #             if finding.get('cve'):
-    #                 vuln_data['cve'] = [finding['cve']]
-                
-    #             try:
-    #                 response = self.session.post(
-    #                     endpoint,
-    #                     json=vuln_data,
-    #                     timeout=self.config['faraday']['timeout'],
-    #                 )
-                    
-    #                 if response.status_code in [200, 201]:
-    #                     pushed_count += 1
-    #                     logger.info(f"Successfully pushed finding: {finding['vulnerability']}")
-    #                 else:
-    #                     failed_count += 1
-    #                     logger.warning(f"Failed to push finding (code {response.status_code}): {response.text}")
-                
-    #             except requests.exceptions.RequestException as e:
-    #                 failed_count += 1
-    #                 logger.error(f"Error pushing finding: {str(e)}")
-            
-    #         result = {
-    #             'status': 'completed',
-    #             'workspace': workspace,
-    #             'total_findings': len(self.findings),
-    #             'pushed': pushed_count,
-    #             'failed': failed_count
-    #         }
-            
-    #         logger.info(f"Faraday push completed: {pushed_count} pushed, {failed_count} failed")
-    #         return result
-            
-    #     except Exception as e:
-    #         logger.error(f"Failed to push findings to Faraday: {str(e)}")
-    #         raise
     
-    # def export_json(self, output_file: str) -> None:
-    #     """Export parsed findings to JSON file."""
-    #     try:
-    #         with open(output_file, 'w') as f:
-    #             json.dump(self.findings, f, indent=2)
-            
-    #         logger.info(f"Exported {len(self.findings)} findings to {output_file}")
-    #     except Exception as e:
-    #         logger.error(f"Failed to export findings to JSON: {str(e)}")
-    #         raise
-
-
 
 def main() -> None:
     """
