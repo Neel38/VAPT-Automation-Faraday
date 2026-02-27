@@ -20,3 +20,5 @@ reports/**
 # Generated tickets (commit sample tickets explicitly if needed)
 tickets/*.json
 !tickets/.gitkeep
+
+templates/report_template.html.bak
