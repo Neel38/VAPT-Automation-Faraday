@@ -607,7 +607,7 @@ def main() -> None:
     parser.add_argument(
         "--type",
         dest="tool_type",
-        choices=["nessus", "openvas", "burp", "zap"],
+        choices=["nmap","nessus", "openvas", "burp", "zap"],
         help="Tool type (auto-detected if omitted for common formats)",
     )
     parser.add_argument(
