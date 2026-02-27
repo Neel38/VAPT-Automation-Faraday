@@ -127,6 +127,8 @@ class VAPTPipeline:
             parser_cmd = f"python report_parser.py --file \"{latest}\" --type {tool_type} --workspace {workspace}"
             self.run_command(parser_cmd, f"{tool_type.capitalize()} report parsing ({latest.name})")
 
+        _process_latest_report("nmap", "nmap")        
+        _process_latest_report("nessus", "nessus")
         _process_latest_report("openvas", "openvas")
         _process_latest_report("burp", "burp")
         return True
