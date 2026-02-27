@@ -140,9 +140,9 @@ class VAPTPipeline:
         self.run_command("python ticket_manager.py stats", "Ticket statistics")
         return True
     
-    def execute_phase_3(self, target_url: str) -> bool:
+    def execute_phase_3(self, target_url: str, workspace: str) -> bool:
         """Execute Phase 3: Live DAST Scanning using ZAP API."""
-        logger.info("\n" + "="*60 + "\nPHASE 3: DAST Scanning (ZAP API)\n" + "="*60)
+        logger.info("\n" + "="*60 + f"\nPHASE 3: DAST Scanning (ZAP API) into {workspace}\n" + "="*60)
         
         dast_config = self.config.get('dast', {})
         if not dast_config.get('enabled', False):
@@ -150,7 +150,6 @@ class VAPTPipeline:
             return True
 
         zap_base = dast_config.get('zap', {}).get('url', 'http://localhost:8080').rstrip('/')
-        webapp_workspace = dast_config.get('workspace', 'webapp_scan')
         
         try:
             # 1. Start Spider
@@ -193,9 +192,9 @@ class VAPTPipeline:
             with open(zap_report_path, "w") as f:
                 f.write(report_resp.text)
             
-            # 4. Import findings to Faraday webapp_scan workspace
-            parser_cmd = f"python report_parser.py --file \"{zap_report_path}\" --type zap --workspace {webapp_workspace}"
-            return self.run_command(parser_cmd, f"ZAP Import into {webapp_workspace}")
+            # 4. Import findings to Faraday into the requested workspace
+            parser_cmd = f"python report_parser.py --file \"{zap_report_path}\" --type zap --workspace {workspace}"
+            return self.run_command(parser_cmd, f"ZAP Import into {workspace}")
 
         except Exception as e:
             logger.error(f"DAST Phase Failed: {str(e)}")
@@ -243,7 +242,7 @@ class VAPTPipeline:
         try:
             if '1' in phases: self.execute_phase_1(target, workspace, profile)
             if '2' in phases: self.execute_phase_2(workspace)
-            if '3' in phases: self.execute_phase_3(target)
+            if '3' in phases: self.execute_phase_3(target, workspace)
             if '4' in phases: self.execute_phase_4(workspace, framework)
             self.end_time = datetime.now()
             self.display_summary()
