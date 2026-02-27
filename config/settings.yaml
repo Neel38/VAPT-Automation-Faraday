@@ -78,12 +78,13 @@ targets:
   default_workspace: "default_lab"
   default_profile: "quick"
   network_ranges:
-    - "172.17.0.3" #DVWA
+    - "172.17.0.2" #DVWA
     - "10.0.2.3" #metasploitable2
 
 # DAST Configuration
 dast:
   enabled: true
+  workspace: "webapp_scan"
   tools:
     - "owasp-zap"
   zap:
