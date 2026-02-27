@@ -88,12 +88,14 @@ jobs:
             --workspace "${{ env.WORKSPACE }}" \
             --phases "3"
 
-      - name: 📤 Upload Scan Results as Artifacts
+      - name: Upload Scan Reports as Artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: VAPT-Reports-${{ github.run_id }}
+          name: VAPT-Reports
           path: |
             reports/
             *.log
-          retention-days: 30
+          retention-days: 7
+          compression-level: 0
+        timeout-minutes: 10
