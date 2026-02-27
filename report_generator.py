@@ -130,31 +130,22 @@ class ReportGenerator:
             sys.exit(1)
     
     def fetch_findings(self, workspace: str) -> List[Dict]:
-        """Fetch all findings from Faraday workspace."""
+        """Fetch all findings from Faraday v3 API."""
         try:
-            # Community edition uses /_api and workspace-scoped vulns endpoint
-            # NOTE: On this server the URL is defined without a trailing slash.
+            # Fixed endpoint for Community v3
             endpoint = f"{self.faraday_url}/_api/v3/ws/{workspace}/vulns"
-
-            response = self.session.get(
-                endpoint,
-                timeout=self.config['faraday']['timeout'],
-            )
+            response = self.session.get(endpoint, timeout=15)
             response.raise_for_status()
 
+            # Fixed: Extract from 'vulnerabilities' -> 'value'
             data = response.json()
-            if isinstance(data, dict) and 'data' in data:
-                self.findings = data.get('data', [])
-            elif isinstance(data, list):
-                self.findings = data
-            else:
-                self.findings = []
+            raw_vulnerabilities = data.get('vulnerabilities', [])
+            self.findings = [item.get('value', {}) for item in raw_vulnerabilities]
 
-            logger.info(f"Fetched {len(self.findings)} findings from Faraday")
+            logger.info(f"Successfully fetched {len(self.findings)} findings.")
             return self.findings
-            
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Failed to fetch findings from Faraday: {str(e)}")
+        except Exception as e:
+            logger.error(f"Failed to fetch findings: {e}")
             return []
     
     def load_findings_from_file(self, file_path: str) -> List[Dict]:
@@ -174,14 +165,12 @@ class ReportGenerator:
         
         if framework.lower() == 'cis':
             mapping = self.CIS_MAP
-        else:  # Default to OWASP
+        else: 
             mapping = self.OWASP_MAP
-        
-        # Try exact match first
+       
         if vuln_lower in mapping:
             return mapping[vuln_lower]
-        
-        # Try partial match
+
         for keyword, control in mapping.items():
             if keyword in vuln_lower:
                 return control
@@ -225,19 +214,17 @@ class ReportGenerator:
         return dict(sorted(compliance_map.items()))
     
     def sort_by_cvss(self, findings: List[Dict]) -> List[Dict]:
-        """Sort findings by CVSS score (highest first)."""
-        def get_cvss(finding):
-            try:
-                score = finding.get('cvss_score')
-                if score is None:
-                    # Estimate based on severity
-                    severity_scores = {'critical': 9.0, 'high': 7.0, 'medium': 5.0, 'low': 3.0}
-                    score = severity_scores.get(finding.get('severity', 'info').lower(), 0)
-                return float(score)
-            except (ValueError, TypeError):
-                return 0
+        """Sort findings by CVSS (highest first) using Faraday v3 keys."""
+        def get_score(f):
+            score = f.get('cvss3', {}).get('base_score') or \
+                    f.get('cvss2', {}).get('base_score') or \
+                    f.get('cvss_score')
+            if score is None:
+                mapping = {'critical': 9.5, 'high': 8.0, 'medium': 5.0, 'low': 2.0}
+                score = mapping.get(str(f.get('severity', '')).lower(), 0.0)
+            return float(score)
         
-        return sorted(findings, key=get_cvss, reverse=True)
+        return sorted(findings, key=get_score, reverse=True)
     
     def generate_report(self, workspace: str, compliance_framework: str = 'owasp',
                        output_file: Optional[str] = None) -> str:
