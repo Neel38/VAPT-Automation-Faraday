@@ -45,9 +45,11 @@ jobs:
       
       - name: 📚 Install Python Dependencies
         run: |
-          python3 -m pip install --upgrade pip --break-system-packages
-          pip3 install -r requirements.txt --break-system-packages
-          echo "✓ Python dependencies installed"
+          python3 -m venv venv
+          source venv/bin/activate
+          python3 -m pip install --upgrade pip
+          pip3 install -r requirements.txt
+          echo "✓ Python dependencies installed safely in venv"
       
       - name: 🕷️ Ensure ZAP Daemon is Running
         run: |
@@ -67,22 +69,21 @@ jobs:
       
       - name: 🎯 Run VAPT Pipeline
         env:
-          # Securely injects your GitHub Secrets into the local Kali runner
           FARADAY_USERNAME: ${{ secrets.FARADAY_USERNAME }}
           FARADAY_PASSWORD: ${{ secrets.FARADAY_PASSWORD }}
         run: |
           NETWORK_TARGET="${{ github.event.inputs.target || '10.0.2.3' }}"
           WEBAPP_TARGET="${{ github.event.inputs.webapp_target || 'http://172.17.0.2/' }}"
-          
+        
           echo "Running Phase 1, 2, 4 (Network & Alerts)"
-          python3 pipeline.py \
+          python pipeline.py \
             --target "$NETWORK_TARGET" \
             --workspace "${{ env.WORKSPACE }}" \
             --profile "${{ env.PROFILE }}" \
             --phases "1,2,4"
 
           echo "Running Phase 3 (DAST ZAP Scan)"
-          python3 pipeline.py \
+          python pipeline.py \
             --target "$WEBAPP_TARGET" \
             --workspace "${{ env.WORKSPACE }}" \
             --phases "3"
