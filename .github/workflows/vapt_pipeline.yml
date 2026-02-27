@@ -90,6 +90,8 @@ jobs:
 
       - name: Upload Scan Reports as Artifacts
         if: always()
+        env:
+          NODE_OPTIONS: "--dns-result-order=ipv4first"
         uses: actions/upload-artifact@v4
         with:
           name: VAPT-Reports
