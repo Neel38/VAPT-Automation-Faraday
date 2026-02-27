@@ -88,16 +88,18 @@ jobs:
             --workspace "${{ env.WORKSPACE }}" \
             --phases "3"
 
-      - name: Upload Scan Reports as Artifacts
+      - name: 📦 Archive Final Reports Only
+        if: always()
+        run: |
+          zip -j final_vapt_report.zip reports/*.html reports/*.json ./*.log
+      - name: 📤 Upload Final Report
         if: always()
         env:
           NODE_OPTIONS: "--dns-result-order=ipv4first"
         uses: actions/upload-artifact@v4
         with:
-          name: VAPT-Reports
-          path: |
-            reports/
-            *.log
+          name: Final-Compliance-Report
+          path: final_vapt_report.zip
           retention-days: 7
           compression-level: 0
         timeout-minutes: 10
