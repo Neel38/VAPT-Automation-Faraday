@@ -204,10 +204,11 @@ Detected at:   {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"""
             }
             color = color_map.get(severity, '#808080')
             
-            host = finding.get('target_distribution', {}).get('host', 'Unknown')
-            port = finding.get('target_distribution', {}).get('port', 'N/A')
-            cve = finding.get('cve', 'N/A')
-            cvss_score = finding.get('cvss_score', 'N/A')
+            host = finding.get('target', 'Unknown')
+            cve_list = finding.get('cve', [])
+            cve = cve_list[0] if isinstance(cve_list, list) and cve_list else 'N/A'
+            cvss_score = finding.get('cvss3', {}).get('base_score') or \
+                         finding.get('cvss2', {}).get('base_score') or 'N/A'
             
             payload = {
                 'attachments': [
@@ -377,7 +378,7 @@ VAPT Pipeline - Automated Vulnerability Alerting
                 # Send alerts via configured channels
                 channels = self.alert_config.get('channels', {})
                 
-                if channels.get('slack', {}).get('enabled', False):
+                if channels.get('slack', {}).get('enabled', False) or os.getenv('SLACK_WEBHOOK_URL'):
                     self.send_slack_alert(finding)
                 
                 if channels.get('email', {}).get('enabled', False):
